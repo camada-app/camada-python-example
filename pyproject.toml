@@ -1,0 +1,44 @@
+[project]
+name = "camada-python-example"
+version = "0.0.1"
+description = "A FastAPI app wired with camada against a local edge-analyst: the hand-test bench for the Python SDK."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+  "camada",
+  "fastapi>=0.110",
+  "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "httpx>=0.27",
+  "ruff>=0.6",
+]
+
+[tool.uv.sources]
+camada = { path = "../camada-python", editable = true }   # the sibling checkout, like the npm examples' file: deps
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+filterwarnings = [
+  "error",
+  # third-party test-client deprecations (starlette's httpx2 nudge, anyio alias), not ours
+  "ignore:.*httpx2.*",
+  "ignore::DeprecationWarning:starlette.*",
+  "ignore::DeprecationWarning:anyio.*",
+]
