@@ -1,0 +1,23 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: camada-python-example }
+      # camada is a path dependency on the sibling checkout; the SDK vendors its own beacon build.
+      - uses: actions/checkout@v4
+        with: { repository: ${{ github.repository_owner }}/camada-python, path: camada-python }
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with: { python-version: ${{ matrix.python }} }
+      - run: uv sync --locked
+        working-directory: camada-python-example
+      - run: uv run ruff check
+        working-directory: camada-python-example
+      - run: uv run pytest
+        working-directory: camada-python-example
