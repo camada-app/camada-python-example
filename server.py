@@ -1,12 +1,14 @@
 # camada-python-example: a small FastAPI app wired with camada against a local edge-analyst.
 # Setup: cp .env.example .env (paste the CAMADA_KEY printed by `npm run seed`), uv sync,
-# uv run uvicorn server:app --port 3002 --no-proxy-headers.
+# uv run uvicorn server:app --port 3002 --no-proxy-headers (the flag: uvicorn would otherwise
+# rewrite the peer from X-Forwarded-For for any 127.0.0.1 client, before camada's trusted-proxy
+# rules get to see the header).
 from __future__ import annotations
 
 import os
 import re
 import time
-from urllib.parse import parse_qs
+from urllib.parse import parse_qsl
 
 from camada.fastapi import CamadaMiddleware, script_tag, serve_challenge, track
 from fastapi import FastAPI, Request
@@ -17,8 +19,8 @@ try:
     with open(".env", encoding="utf-8") as env_file:
         for line in env_file:
             m = re.match(r"^([A-Z_]+)=(.*)$", line.strip())
-            if m and os.environ.get(m[1]) is None:
-                os.environ[m[1]] = m[2]
+            if m:
+                os.environ.setdefault(m[1], m[2])
 except OSError:
     pass  # no .env: rely on the environment
 
@@ -68,7 +70,7 @@ async def login_form(request: Request) -> HTMLResponse:
 @app.post("/login")
 async def login(request: Request) -> HTMLResponse:
     # parse the urlencoded form by hand: request.form() needs python-multipart, an extra dependency
-    form = {k: v[0] for k, v in parse_qs((await request.body()).decode()).items()}
+    form = dict(parse_qsl((await request.body()).decode("utf-8", "replace")))
     ok = form.get("user") == "demo@example.com" and form.get("pass") == "demo"
     track(request, "login_succeeded" if ok else "login_failed", user=form.get("user", ""))  # uid is HMAC-hashed in the SDK
     return page(request, "Welcome" if ok else "Nope", f"<p>login {'succeeded' if ok else 'failed'}</p>", status=200 if ok else 401)
@@ -96,10 +98,3 @@ async def challenge_me(request: Request) -> HTMLResponse:
 async def not_found(request: Request, _exc: Exception) -> HTMLResponse:
     return page(request, "404", "<p>Nothing here.</p>", status=404)
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    # proxy_headers=False: uvicorn would otherwise rewrite the peer from X-Forwarded-For for any
-    # 127.0.0.1 client, before camada's trusted-proxy rules get to see the header
-    uvicorn.run("server:app", host="127.0.0.1", port=int(os.environ.get("PORT", "3002")), proxy_headers=False)
