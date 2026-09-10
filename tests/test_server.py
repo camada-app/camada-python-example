@@ -3,6 +3,7 @@
 # (challenge) still work because the challenge kit needs no snapshot.
 from __future__ import annotations
 
+import os
 import re
 import socket
 from collections.abc import Iterator
@@ -24,18 +25,24 @@ def closed_port() -> int:
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClient]:
     dead = f"http://127.0.0.1:{closed_port()}"
     monkeypatch.setenv("CAMADA_KEY", "tok-example.snap-example")
     monkeypatch.setenv("CAMADA_INGEST_URL", dead)
     monkeypatch.setenv("CAMADA_SNAPSHOT_URL", dead + "/snapshot")
     monkeypatch.setenv("CAMADA_TRUSTED_PROXY", "hops:1")
     monkeypatch.delenv("CAMADA_DISABLED", raising=False)
+    monkeypatch.chdir(tmp_path)  # server's .env loader fills unset variables: a developer .env must not reach the suite
     monkeypatch.setattr(camada, "_default", None)  # the lazy first-request build, as in production
     import server
 
+    # the middleware instance caches its engine, and Starlette builds the stack once: rebuild it so this
+    # test's first request builds its own engine instead of running through the previous test's stopped one
+    server.app.middleware_stack = None
     yield TestClient(server.app)
-    camada.get_default().stop()
+    engine = camada._default  # the one the middleware built (None only if the test made no request)
+    if engine is not None:
+        engine.stop()
 
 
 def test_pages_render_with_the_first_party_beacon(client: TestClient) -> None:
@@ -57,6 +64,18 @@ def test_login_reports_the_outcome(client: TestClient) -> None:
     assert bad.status_code == 401 and "login failed" in bad.text
     ok = client.post("/login", data={"user": "demo@example.com", "pass": "demo"})
     assert ok.status_code == 200 and "login succeeded" in ok.text
+    # a body that is not UTF-8 is a failed login, not a 500
+    raw = client.post("/login", content=b"user=\xff&pass=x", headers={"content-type": "application/x-www-form-urlencoded"})
+    assert raw.status_code == 401
+
+
+def test_each_test_builds_its_own_engine(client: TestClient) -> None:
+    """The fixture's reset reaches the middleware: the first request builds an engine from this test's env."""
+    assert camada._default is None
+    client.get("/")
+    engine = camada._default
+    assert engine is not None and engine.env is not None
+    assert engine.env.snapshot_url == os.environ["CAMADA_SNAPSHOT_URL"]
 
 
 def test_a_cold_snapshot_falls_open(client: TestClient) -> None:

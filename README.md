@@ -39,19 +39,30 @@ This is the hand-test bench for the Python SDK, the twin of [`camada-node-exampl
 The integrations build one engine lazily, on the first request through the middleware. That
 build starts the snapshot poll on a daemon thread and never blocks, so the request that
 triggered it is matched against an empty snapshot and falls open: a `curl` from the blocked IP
-right after boot gets `200` with an `x-rid`, the next one (tens of milliseconds later against a
-local analyst) gets `403`. `node scripts/e2e-sdk-python.mjs` in `../camada/edge-analyst` makes
-that first request itself and asserts both answers; the node example's e2e cannot, because its
-boot probe is the first request.
+right after boot gets `200` with an `x-rid`, and requests keep passing until that first poll
+lands — a few hundred milliseconds against a local analyst (the e2e measures ~270 ms with a
+250 ms probe; the figure is snapshot-size and network bound), then `403`.
+`node scripts/e2e-sdk-python.mjs` in `../camada/edge-analyst` makes that first request itself
+and asserts both answers; the node example's e2e cannot, because its boot probe is the first
+request.
 
-If request 1 must be enforced, warm the engine at startup with one synchronous poll:
+If request 1 must be enforced, warm the engine in a startup hook by waiting for the boot poll:
 
 ```python
+import time
 import camada
-engine = camada.get_default()
-if engine.snap:          # None when CAMADA_KEY is unset or CAMADA_DISABLED=1
-    engine.snap.refresh()
+from camada.snapshot.match import MatchInput
+
+engine = camada.get_default()   # builds the engine; the boot poll is already running on its thread
+if engine.snap:                 # None when CAMADA_KEY is unset or CAMADA_DISABLED=1
+    deadline = time.monotonic() + 5
+    while engine.snap.verdict(MatchInput(ip="0.0.0.0")).reason == "cold" and time.monotonic() < deadline:
+        time.sleep(0.01)        # bounded: an unreachable analyst leaves it cold, and the app still fails open
 ```
+
+`snap.refresh()` is not the warm-up: the boot poll holds the single-in-flight lock, so a
+synchronous `refresh()` called right after `get_default()` returns at once and the engine is
+still cold.
 
 ## Challenge (SDK-04)
 
