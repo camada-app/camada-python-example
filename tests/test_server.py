@@ -99,12 +99,17 @@ def test_unknown_path_renders_the_404_page(client: TestClient) -> None:
     assert r.status_code == 404 and "Nothing here" in r.text and "x-rid" in r.headers
 
 
-def test_lockfile_records_the_sibling_sdk_version() -> None:
-    """uv.lock pins the path dependency's version the way package-lock.json pins a file: dep; re-lock after a bump."""
+def test_lockfile_records_the_sibling_sdk() -> None:
+    """uv.lock records the path dependency as the sibling editable checkout, the way package-lock.json
+    records a file: dep. camada-python's version is dynamic (hatch reads version.py), so current uv writes
+    the entry without a version line and there is nothing to drift; a lock written by an older uv still
+    carries one, and then it must match what the sibling ships: re-lock after a bump."""
     version_py = ROOT.parent / "camada-python" / "src" / "camada" / "version.py"
     if not version_py.exists():
         pytest.fail(f"no camada-python checkout beside this repo ({version_py})")
     shipped = re.search(r'^__version__ = "([^"]+)"', version_py.read_text(), re.M)
+    assert shipped, f"no __version__ literal in {version_py}"
     lock = (ROOT / "uv.lock").read_text()
-    locked = re.search(r'name = "camada"\nversion = "([^"]+)"\nsource = \{ editable = "\.\./camada-python" \}', lock)
-    assert shipped and locked and locked[1] == shipped[1], "uv.lock is behind camada-python: run `uv lock`"
+    locked = re.search(r'name = "camada"\n(?:version = "([^"]+)"\n)?source = \{ editable = "\.\./camada-python" \}', lock)
+    assert locked, "uv.lock does not record the sibling camada-python checkout: run `uv lock`"
+    assert locked[1] in (None, shipped[1]), "uv.lock is behind camada-python: run `uv lock`"
