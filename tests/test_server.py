@@ -89,9 +89,10 @@ def test_challenge_me_serves_the_page_to_a_browser(client: TestClient) -> None:
     assert r.headers["content-type"].startswith("text/html") and "/__camada/challenge" in r.text
 
 
-def test_challenge_me_answers_json_to_an_api_client(client: TestClient) -> None:
+def test_challenge_me_signals_an_api_client(client: TestClient) -> None:
     r = client.get("/challenge-me", headers={"x-forwarded-for": "198.51.100.7"})
-    assert r.status_code == 403 and r.json() == {"error": "challenge_required"}
+    assert r.status_code == 200 and r.headers["x-camada-challenge"] == "1"
+    assert r.headers["cache-control"] == "no-store"
 
 
 def test_unknown_path_renders_the_404_page(client: TestClient) -> None:
