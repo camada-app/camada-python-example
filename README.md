@@ -78,8 +78,8 @@ same page camada serves automatically for a `challenge` verdict.
 3. A request without an HTML `Accept` (an API client, an image, a fetch) cannot solve a challenge,
    so it passes to the app signalled: the route renders (**200**) with `x-camada-challenge: 1` and
    `cache-control: no-store`, and the app or client decides what to do.
-4. The events tell the two apart: a served challenge ships `st: 403, blk: "challenge"`, a passed
-   one ships `st: 200, ch: 1`.
+4. The events tell the three apart: a served challenge ships `st: 403, blk: "challenge"`, a passed
+   one ships `st: 200, ch: 1`, and a signalled one (step 3) ships `st: 200, chs: 1`.
 
 The nonce and the cookie are bound to the client IP, so camada serves no challenge to a request
 it cannot identify (no trusted-proxy config and no socket address). Clear `_cch` — or open a
