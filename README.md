@@ -75,9 +75,9 @@ same page camada serves automatically for a `challenge` verdict.
    the `_cch` cookie (`HttpOnly`, `SameSite=Lax`, one hour); reload and the page renders at once.
 2. `curl -i http://localhost:3002/challenge-me -H 'accept: text/html' -H 'sec-fetch-dest: document'`
    → **403** with `x-camada-challenge: 1` and the page in the body.
-3. Without an HTML `Accept` (an API client, an image, a fetch) the answer is
-   `403 {"error":"challenge_required"}` instead — a status a client can act on rather than a
-   page it cannot solve.
+3. A request without an HTML `Accept` (an API client, an image, a fetch) cannot solve a challenge,
+   so it passes to the app signalled: the route renders (**200**) with `x-camada-challenge: 1` and
+   `cache-control: no-store`, and the app or client decides what to do.
 4. The events tell the two apart: a served challenge ships `st: 403, blk: "challenge"`, a passed
    one ships `st: 200, ch: 1`.
 
