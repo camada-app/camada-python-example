@@ -11,6 +11,11 @@ dependencies = [
   "uvicorn>=0.30",
 ]
 
+[project.urls]
+Homepage = "https://www.camada.app/docs/quickstart/fastapi"
+Documentation = "https://www.camada.app/docs/python"
+Repository = "https://github.com/camada-app/camada-python-example"
+
 [dependency-groups]
 dev = [
   "pytest>=8",
